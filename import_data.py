@@ -31,8 +31,6 @@ def import_data():
 
     # Check if data already exists
     with engine.connect() as connection:
-        # Check if table exists first (handled by create_all, but good to be safe)
-        # We can just check count
         try:
             result = connection.execute(text("SELECT COUNT(*) FROM properties"))
             count = result.scalar()
@@ -41,7 +39,6 @@ def import_data():
                 return
         except Exception as e:
             print(f"Error checking database: {e}")
-            # If table doesn't exist, we continue (create_all should have created it though)
 
     print("Reading CSV and importing to DB...")
     

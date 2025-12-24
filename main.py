@@ -10,9 +10,6 @@ from schemas import PropertySchema, ClusterSchema
 from cache import redis_client
 from import_data import import_data
 
-# Create tables if they don't exist (handled in import_data but good to have)
-# Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -34,7 +31,6 @@ PROPERTIES_DF = None
 @app.on_event("startup")
 def load_db_to_redis():
     """Load all properties from Postgres to Redis and memory on startup."""
-    global PROPERTIES_DF
     
     # Ensure data is imported
     try:
@@ -42,6 +38,7 @@ def load_db_to_redis():
     except Exception as e:
         print(f"Error importing data: {e}")
 
+    global PROPERTIES_DF
     print("Loading all properties from DB to memory...")
     db = SessionLocal()
     try:
