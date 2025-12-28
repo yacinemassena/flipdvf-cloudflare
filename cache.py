@@ -24,7 +24,11 @@ class MockRedis:
 
 try:
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    redis_client = redis.from_url(redis_url, decode_responses=True)
+    redis_client = redis.from_url(
+        redis_url, 
+        decode_responses=True,
+        max_connections=50
+    )
     # Test connection
     redis_client.ping()
     print(f"Connected to Redis at {redis_url}")

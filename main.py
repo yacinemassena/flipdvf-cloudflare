@@ -1,6 +1,6 @@
 import polars as pl
 import math
-import json
+import orjson
 import hashlib
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -124,7 +124,7 @@ def prewarm_initial_tiles():
                 if not redis_client.get(cache_key):
                     res = compute_tile_on_fly(tx, ty, z)
                     if res:
-                        redis_client.setex(cache_key, 86400, json.dumps(res))
+                        redis_client.setex(cache_key, 86400, orjson.dumps(res))
             except Exception as e:
                 logger.error(f"Error prewarming tile {z}/{tx}/{ty}: {e}")
     print("✅ Pre-warming complete.")
@@ -246,7 +246,7 @@ def get_markers(
     try:
         cached_view = redis_client.get(viewport_key)
         if cached_view:
-            return json.loads(cached_view)
+            return orjson.loads(cached_view)
     except Exception as e:
         logger.error(f"Viewport cache error: {e}")
 
@@ -263,14 +263,14 @@ def get_markers(
             # 1. Try precomputed/cached tile first
             cached = redis_client.get(cache_key)
             if cached:
-                all_results.extend(json.loads(cached))
+                all_results.extend(orjson.loads(cached))
                 continue
             
             # 2. Cache miss → compute and CACHE IT
             tile_result = compute_tile_on_fly(tx, ty, req_z)
             if tile_result:
                 # Store in Redis for next time
-                redis_client.setex(cache_key, 86400, json.dumps(tile_result))
+                redis_client.setex(cache_key, 86400, orjson.dumps(tile_result))
                 all_results.extend(tile_result)
                 
         except Exception as e:
@@ -284,7 +284,7 @@ def get_markers(
     # Cache the final result for this viewport
     if all_results:
         try:
-             redis_client.setex(viewport_key, 300, json.dumps(all_results)) # Cache for 5 mins
+             redis_client.setex(viewport_key, 300, orjson.dumps(all_results)) # Cache for 5 mins
         except Exception as e:
              logger.error(f"Viewport cache write error: {e}")
     
@@ -302,7 +302,7 @@ def get_tile(z: int, x: int, y: int, response: Response):
         cached = redis_client.get(cache_key)
         if cached:
             logger.debug(f"Cache HIT: {cache_key}")
-            return json.loads(cached)
+            return orjson.loads(cached)
         else:
             logger.info(f"Cache MISS: {cache_key} - computing on-the-fly")
     except Exception as e:
@@ -314,7 +314,7 @@ def get_tile(z: int, x: int, y: int, response: Response):
     # Store in Redis
     try:
         if result:
-            redis_client.setex(cache_key, 86400, json.dumps(result))
+            redis_client.setex(cache_key, 86400, orjson.dumps(result))
     except Exception as e:
         logger.error(f"Redis write error: {e}")
         

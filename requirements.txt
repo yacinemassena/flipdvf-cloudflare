@@ -6,3 +6,4 @@ psycopg2-binary
 polars
 redis
 requests
+orjson

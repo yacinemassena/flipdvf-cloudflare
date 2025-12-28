@@ -2,7 +2,7 @@ import sys
 import os
 import time
 import math
-import json
+import orjson
 import logging
 import polars as pl
 from database import SessionLocal
@@ -96,7 +96,7 @@ def precompute_all_tiles(df=None, r_client=None):
             
             if result:
                 key = f"tile:{zoom}:{tx}:{ty}"
-                pipe.setex(key, 2592000, json.dumps(result)) # 30 days
+                pipe.setex(key, 2592000, orjson.dumps(result)) # 30 days
                 count += 1
                 
             if count % 1000 == 0:
