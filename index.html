@@ -134,6 +134,32 @@
                 console.log("Looking for map: " + mapId);
 
 
+                // Define CDN URL
+                const TILE_CDN = "https://pub-ecf2cacf42304db4aff89b230d889189.r2.dev/tiles";
+
+                // Helper: get tile coords for bounds
+                function getTilesForBounds(bounds, zoom) {
+                    const n = Math.pow(2, zoom);
+                    
+                    function latLonToTile(lat, lon) {
+                        const x = Math.floor((lon + 180) / 360 * n);
+                        const latRad = lat * Math.PI / 180;
+                        const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+                        return [x, y];
+                    }
+                    
+                    const [minX, maxY] = latLonToTile(bounds.getSouth(), bounds.getWest());
+                    const [maxX, minY] = latLonToTile(bounds.getNorth(), bounds.getEast());
+                    
+                    const tiles = [];
+                    for (let x = minX; x <= maxX; x++) {
+                        for (let y = minY; y <= maxY; y++) {
+                            tiles.push([x, y]);
+                        }
+                    }
+                    return tiles.slice(0, 100); // Limit to prevent too many requests
+                }
+
                 function initMapLogic(mapInstance) {
                     console.log("Initializing map logic on:", mapInstance);
                     
@@ -199,25 +225,24 @@
                         if (!mapInstance) return;
                         
                         const bounds = mapInstance.getBounds();
-                        const zoom = Math.floor(mapInstance.getZoom());
+                        const zoom = Math.min(Math.max(Math.floor(mapInstance.getZoom()), 6), 14);
                         
-                        const minLat = bounds.getSouth();
-                        const maxLat = bounds.getNorth();
-                        const minLon = bounds.getWest();
-                        const maxLon = bounds.getEast();
+                        const tiles = getTilesForBounds(bounds, zoom);
                         
-                        const url = `/api/markers?min_lat=${minLat}&max_lat=${maxLat}&min_lon=${minLon}&max_lon=${maxLon}&zoom=${zoom}`;
+                        console.log(`Loading ${tiles.length} tiles from CDN at zoom ${zoom}`);
                         
-                        console.log("Loading markers from smart endpoint:", url);
-                        
-                        fetch(url)
-                            .then(r => r.json())
-                            .then(data => {
-                                console.log(`Received ${data.length} markers`);
-                                markerLayer.clearLayers();
-                                data.forEach(item => renderItem(item));
-                            })
-                            .catch(err => console.error("Error loading markers:", err));
+                        // Fetch all tiles in parallel from CDN
+                        Promise.all(
+                            tiles.map(([x, y]) =>
+                                fetch(`${TILE_CDN}/${zoom}/${x}/${y}.json`)
+                                    .then(r => r.ok ? r.json() : [])
+                                    .catch(() => []) // Missing tile = empty
+                            )
+                        ).then(results => {
+                            markerLayer.clearLayers();
+                            results.flat().forEach(item => renderItem(item));
+                            console.log(`Rendered ${results.flat().length} markers`);
+                        });
                     }
 
                     mapInstance.on('moveend', loadMarkers);

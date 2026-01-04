@@ -1,9 +1,6 @@
 fastapi
 uvicorn
-sqlalchemy
-python-multipart
-psycopg2-binary
 polars
-redis
 requests
-orjson
+boto3
+tqdm
