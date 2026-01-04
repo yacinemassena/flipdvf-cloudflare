@@ -1,3 +1,5 @@
+fastapi
+uvicorn
 polars
 requests
 boto3
