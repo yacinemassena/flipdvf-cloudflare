@@ -133,9 +133,31 @@
                 
                 console.log("Looking for map: " + mapId);
 
+                // Define CDN URL (Bundled)
+                // Use local path if on localhost, otherwise use R2 CDN
+                const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+                const TILE_CDN = isLocal ? "bundled_tiles" : "https://pub-ecf2cacf42304db4aff89b230d889189.r2.dev/bundled_tiles";
+                
+                console.log(`Environment: ${isLocal ? 'Local' : 'Production'}, using tiles from: ${TILE_CDN}`);
+                
+                // Cache zoom level data in memory
+                const zoomCache = {};
 
-                // Define CDN URL
-                const TILE_CDN = "https://pub-ecf2cacf42304db4aff89b230d889189.r2.dev/tiles";
+                async function loadZoomData(zoom) {
+                    if (zoomCache[zoom]) return zoomCache[zoom];
+                    
+                    try {
+                        const resp = await fetch(`${TILE_CDN}/z${zoom}.json`);
+                        if (!resp.ok) return {};
+                        
+                        const data = await resp.json();
+                        zoomCache[zoom] = data;
+                        return data;
+                    } catch (e) {
+                        console.error("Error fetching zoom bundle:", e);
+                        return {};
+                    }
+                }
 
                 // Helper: get tile coords for bounds
                 function getTilesForBounds(bounds, zoom) {
@@ -154,10 +176,10 @@
                     const tiles = [];
                     for (let x = minX; x <= maxX; x++) {
                         for (let y = minY; y <= maxY; y++) {
-                            tiles.push([x, y]);
+                            tiles.push(`${x},${y}`);
                         }
                     }
-                    return tiles.slice(0, 100); // Limit to prevent too many requests
+                    return tiles;
                 }
 
                 function initMapLogic(mapInstance) {
@@ -221,47 +243,55 @@
                         }
                     }
 
+                    let loadTimeout = null;
+
                     function loadMarkers() {
+                        if (loadTimeout) clearTimeout(loadTimeout);
+                        loadTimeout = setTimeout(_loadMarkers, 100);
+                    }
+
+                    async function _loadMarkers() {
                         if (!mapInstance) return;
                         
                         const bounds = mapInstance.getBounds();
                         const zoom = Math.min(Math.max(Math.floor(mapInstance.getZoom()), 6), 14);
                         
-                        const tiles = getTilesForBounds(bounds, zoom);
+                        // Single fetch for entire zoom level
+                        const data = await loadZoomData(zoom);
                         
-                        console.log(`Loading ${tiles.length} tiles from CDN at zoom ${zoom}`);
+                        // Get tiles in view
+                        const tileKeys = getTilesForBounds(bounds, zoom);
                         
-                        // Fetch tiles (check cache first)
-                        const promises = tiles.map(([x, y]) => {
-                            const key = `${zoom}/${x}/${y}`;
-                            
-                            if (tileCache.has(key)) {
-                                return tileCache.get(key);
+                        // Collect markers from matching tiles
+                        const markers = [];
+                        for (const key of tileKeys) {
+                            if (data[key]) {
+                                markers.push(...data[key]);
+                            }
+                        }
+                        
+                        // console.log(`Rendering ${markers.length} markers from ${tileKeys.length} tiles`);
+                        
+                        markerLayer.clearLayers();
+                        
+                        // Chunked rendering to avoid freezing UI
+                        const allItems = markers;
+                        let index = 0;
+                        
+                        function renderChunk() {
+                            const start = performance.now();
+                            // Render for max 8ms per frame to maintain 60fps
+                            while (index < allItems.length && performance.now() - start < 8) {
+                                renderItem(allItems[index]);
+                                index++;
                             }
                             
-                            // Create request promise
-                            const promise = fetch(`${TILE_CDN}/${zoom}/${x}/${y}.json`)
-                                .then(r => {
-                                    if (!r.ok) return [];
-                                    return r.json();
-                                })
-                                .catch(() => []); // Missing tile = empty
-                                
-                            // Store in cache
-                            tileCache.set(key, promise);
-                            return promise;
-                        });
-
-                        // Render when all data is ready
-                        Promise.all(promises).then(results => {
-                            markerLayer.clearLayers();
-                            const allItems = results.flat();
-                            
-                            // Performance: only render if count is reasonable, otherwise clusters might be needed (but data is already clustered)
-                            allItems.forEach(item => renderItem(item));
-                            
-                            console.log(`Rendered ${allItems.length} markers`);
-                        });
+                            if (index < allItems.length) {
+                                requestAnimationFrame(renderChunk);
+                            }
+                        }
+                        
+                        requestAnimationFrame(renderChunk);
                     }
 
                     mapInstance.on('moveend', loadMarkers);
