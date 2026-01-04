@@ -231,17 +231,36 @@
                         
                         console.log(`Loading ${tiles.length} tiles from CDN at zoom ${zoom}`);
                         
-                        // Fetch all tiles in parallel from CDN
-                        Promise.all(
-                            tiles.map(([x, y]) =>
-                                fetch(`${TILE_CDN}/${zoom}/${x}/${y}.json`)
-                                    .then(r => r.ok ? r.json() : [])
-                                    .catch(() => []) // Missing tile = empty
-                            )
-                        ).then(results => {
+                        // Fetch tiles (check cache first)
+                        const promises = tiles.map(([x, y]) => {
+                            const key = `${zoom}/${x}/${y}`;
+                            
+                            if (tileCache.has(key)) {
+                                return tileCache.get(key);
+                            }
+                            
+                            // Create request promise
+                            const promise = fetch(`${TILE_CDN}/${zoom}/${x}/${y}.json`)
+                                .then(r => {
+                                    if (!r.ok) return [];
+                                    return r.json();
+                                })
+                                .catch(() => []); // Missing tile = empty
+                                
+                            // Store in cache
+                            tileCache.set(key, promise);
+                            return promise;
+                        });
+
+                        // Render when all data is ready
+                        Promise.all(promises).then(results => {
                             markerLayer.clearLayers();
-                            results.flat().forEach(item => renderItem(item));
-                            console.log(`Rendered ${results.flat().length} markers`);
+                            const allItems = results.flat();
+                            
+                            // Performance: only render if count is reasonable, otherwise clusters might be needed (but data is already clustered)
+                            allItems.forEach(item => renderItem(item));
+                            
+                            console.log(`Rendered ${allItems.length} markers`);
                         });
                     }
 

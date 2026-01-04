@@ -8,8 +8,8 @@ import threading
 # Configuration
 ACCOUNT_ID = "2a139e9393f803634546ad9d541d37b9"
 BUCKET_NAME = "europe"
-LOCAL_FOLDER = "static_tiles"
-R2_FOLDER_PREFIX = "tiles/"  # Will result in europe/tiles/6/...
+LOCAL_FOLDER = "bundled_tiles"
+R2_FOLDER_PREFIX = "bundled_tiles/"  # Will result in europe/bundled_tiles/z6.json...
 
 def upload_folder_to_r2(access_key, secret_key):
     s3 = boto3.client(
@@ -24,7 +24,7 @@ def upload_folder_to_r2(access_key, secret_key):
     for root, dirs, files in os.walk(LOCAL_FOLDER):
         for file in files:
             local_path = os.path.join(root, file)
-            # relative path from static_tiles/ e.g. "6/32/22.json"
+            # relative path from bundled_tiles/ e.g. "z6.json"
             relative_path = os.path.relpath(local_path, LOCAL_FOLDER)
             # standardizing on forward slashes for S3 keys
             s3_key = f"{R2_FOLDER_PREFIX}{relative_path}".replace("\\", "/")
